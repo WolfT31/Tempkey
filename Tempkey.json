@@ -19,5 +19,12 @@
     "password": "wolftz",
     "expiresAt": "2025-6-9",
     "allowOffline": false
+  },
+  {
+    "id": "2c09063529071616",
+    "username": "wolftz",
+    "password": "wolftz",
+    "expiresAt": "2025-6-12",
+    "allowOffline": false
   }
 ]
