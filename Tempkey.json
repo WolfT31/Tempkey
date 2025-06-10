@@ -15,9 +15,9 @@
   },
   {
     "id": "933921f5bc682771",
-    "username": "SpyKid",
+    "username": "wolftz",
     "password": "wolftz",
     "expiresAt": "2025-6-11",
-    "allowOffline": false
+    "allowOffline": true
   }
 ]
