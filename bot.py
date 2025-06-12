@@ -26,14 +26,15 @@ REPO_PATH = os.path.abspath(os.path.dirname(__file__))
 JSON_FILE = os.path.join(REPO_PATH, "Tempkey.json")
 GITHUB_REPO_URL = f"https://{GITHUB_TOKEN}@github.com/WolfT31/Tempkey.git"
 
-def load_users(file_path='Tempkey.json'):
+def load_users(file_path=JSON_FILE):
     try:
         with open(file_path, 'r') as file:
             data = json.load(file)
             return data.get("users", [])
     except (FileNotFoundError, json.JSONDecodeError):
         return []
-def save_users(users, file_path='Tempkey.json'):
+
+def save_users(users, file_path=JSON_FILE):
     data = {"users": users}
     with open(file_path, 'w') as file:
         json.dump(data, file, indent=4)
