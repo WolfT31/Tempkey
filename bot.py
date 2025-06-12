@@ -33,36 +33,35 @@ def load_users():
             return json.load(f).get("users", [])
     return []
 
-# ✅ Save updated user list and push changes to GitHub (corrected version)
 def save_users(users):
     with open(JSON_FILE, "w") as f:
         json.dump({"users": users}, f, indent=2)
 
-    repo = Repo(REPO_PATH)
+    print(f"✅ Wrote {len(users)} users to {JSON_FILE}")
 
-# ✅ 1. Ensure we're on main branch **before doing anything**
-if repo.head.is_detached:
     try:
-        repo.git.checkout("main")
+        repo = Repo(REPO_PATH)
+
+        # Ensure we're on the main branch
+        if repo.head.is_detached:
+            repo.git.checkout("main")
+
+        # Stage and commit the updated JSON file
+        repo.git.add(JSON_FILE)
+        repo.index.commit("Update users")
+
+        # Set or update remote
+        if "origin" not in [remote.name for remote in repo.remotes]:
+            repo.create_remote("origin", GITHUB_REPO_URL)
+        else:
+            repo.remote("origin").set_url(GITHUB_REPO_URL)
+
+        # Push changes to GitHub
+        repo.remote("origin").push(refspec="main:main")
+        print("✅ Pushed to GitHub successfully")
+
     except Exception as e:
-        raise RuntimeError("❌ Failed to checkout 'main' branch. Please ensure it exists.") from e
-
-# ✅ 2. Now commit the file
-repo.git.add("Tempkey.json")
-repo.index.commit("Update users")
-
-# ✅ 3. Set the remote and push to GitHub
-origin = repo.remote(name="origin")
-origin.set_url(GITHUB_REPO_URL)
-origin.push("main")  # <--- THIS LINE IS MISSING IN YOUR CODE
-
-    # Set or update remote
-    if "origin" not in [remote.name for remote in repo.remotes]:
-        repo.create_remote("origin", GITHUB_REPO_URL)
-    else:
-        repo.remote("origin").set_url(GITHUB_REPO_URL)
-
-    repo.remote("origin").push(refspec="main:main")
+        print(f"❌ Git operation failed: {e}")
 
 # /start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
