@@ -27,36 +27,16 @@ JSON_FILE = os.path.join(REPO_PATH, "Tempkey.json")
 GITHUB_REPO_URL = f"https://{GITHUB_TOKEN}@github.com/WolfT31/Tempkey.git"
 
 # Load user list from the Tempkey.json file
-def save_users(users):
-    import git
-    with open(JSON_FILE, "w") as f:
-        json.dump({"users": users}, f, indent=2)
+import json
 
-    repo = git.Repo(REPO_PATH)
-
-    # Checkout main branch (safe guard)
-    if repo.head.is_detached:
-        repo.git.checkout("main")
-
-    # Add and commit
-    repo.git.add("Tempkey.json")
+def load_users(file_path='Tempkey.json'):
     try:
-        repo.index.commit("Update Tempkey.json with new users")
-    except Exception as e:
-        print("No changes to commit:", e)
-
-    # Set or update remote and push
-    if "origin" not in [remote.name for remote in repo.remotes]:
-        repo.create_remote("origin", GITHUB_REPO_URL)
-    else:
-        repo.remote("origin").set_url(GITHUB_REPO_URL)
-
-    # Push to GitHub
-    try:
-        repo.remote("origin").push(refspec="main:main")
-        print("✅ Changes pushed to GitHub")
-    except Exception as e:
-        print("❌ GitHub push failed:", e)
+        with open(file_path, 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError:
+        return {}
 
 # /start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
