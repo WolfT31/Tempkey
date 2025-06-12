@@ -27,46 +27,53 @@ JSON_FILE = os.path.join(REPO_PATH, "Tempkey.json")
 GITHUB_REPO_URL = f"https://{GITHUB_TOKEN}@github.com/WolfT31/Tempkey.git"
 
 # ✅ FIXED: Load user list safely
-def load_users():
-    if os.path.exists(JSON_FILE):
-        try:
-            with open(JSON_FILE, "r") as f:
-                data = f.read().strip()
-                if not data:
-                    print("⚠️ Tempkey.json is empty. Returning empty list.")
-                    return []
-                return json.loads(data).get("users", [])
-        except Exception as e:
-            print(f"❌ Error loading users: {e}")
-            return []
-    return []
+import base64
+import requests
 
-# ✅ FIXED: Save and push to GitHub properly
+# ✅ Save updated user list and push changes to GitHub via API
 def save_users(users):
-    with open(JSON_FILE, "w") as f:
-        json.dump({"users": users}, f, indent=2)
+    json_data = json.dumps({"users": users}, indent=2)
 
-    print("✅ Users saved locally:", users)
+    # GitHub Repo Info
+    owner = "WolfT31"
+    repo = "Tempkey"
+    file_path = "Tempkey.json"
+    branch = "main"
+    token = GITHUB_TOKEN
 
-    repo = Repo(REPO_PATH)
+    # GitHub API endpoint to get file SHA
+    get_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}"
 
-    # Checkout to main if detached
-    if repo.head.is_detached:
-        try:
-            repo.git.checkout("main")
-        except Exception as e:
-            raise RuntimeError("❌ Failed to checkout 'main' branch.") from e
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
 
-    repo.git.add("Tempkey.json")
-    repo.index.commit("Update users")
+    # Get the SHA of the existing file (needed for updating)
+    response = requests.get(get_url, headers=headers)
+    if response.status_code != 200:
+        print("❌ Failed to get file SHA:", response.text)
+        return
 
-    if "origin" not in [r.name for r in repo.remotes]:
-        repo.create_remote("origin", GITHUB_REPO_URL)
+    sha = response.json().get("sha")
+    if not sha:
+        print("❌ SHA not found in response.")
+        return
+
+    # Prepare the updated content
+    data = {
+        "message": "Update Tempkey.json via Telegram bot",
+        "content": base64.b64encode(json_data.encode()).decode(),
+        "branch": branch,
+        "sha": sha
+    }
+
+    # Push the update via PUT request
+    put_response = requests.put(get_url, headers=headers, json=data)
+    if put_response.status_code == 200:
+        print("✅ Tempkey.json updated on GitHub.")
     else:
-        repo.remote("origin").set_url(GITHUB_REPO_URL)
-
-    repo.remote("origin").push(refspec="main:main")
-    print("✅ Changes pushed to GitHub.")
+        print("❌ GitHub update failed:", put_response.text)
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
