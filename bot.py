@@ -12,8 +12,6 @@ from telegram.ext import (
 )
 from git import Repo
 from dotenv import load_dotenv
-from flask import Flask
-import threading
 
 # Load environment variables from .env file
 load_dotenv()
@@ -25,7 +23,7 @@ ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
 # Set file paths and GitHub repo URL
 REPO_PATH = os.path.abspath(os.path.dirname(__file__))
-JSON_FILE = os.path.join(REPO_PATH, "Tempkey.json")
+JSON_FILE = os.path.join(REPO_PATH, "Tempkey.json")  # Renamed from users.json
 GITHUB_REPO_URL = f"https://{GITHUB_TOKEN}@github.com/WolfT31/Tempkey.json.git"
 
 # Load user list from the Tempkey.json file
@@ -35,7 +33,7 @@ def load_users():
             return json.load(f).get("users", [])
     return []
 
-# ✅ Safe Git save with fallback if 'origin' is missing
+# ✅ Save updated user list and push changes to GitHub (corrected version)
 def save_users(users):
     with open(JSON_FILE, "w") as f:
         json.dump({"users": users}, f, indent=2)
@@ -44,13 +42,20 @@ def save_users(users):
     repo.git.add("Tempkey.json")
     repo.index.commit("Update users")
 
-    # Check if 'origin' remote exists, if not, create it
+    # Ensure we're on the main branch
+    if repo.head.is_detached:
+        try:
+            repo.git.checkout("main")
+        except Exception as e:
+            raise RuntimeError("❌ Failed to checkout 'main' branch. Please ensure it exists.") from e
+
+    # Set or update remote
     if "origin" not in [remote.name for remote in repo.remotes]:
         repo.create_remote("origin", GITHUB_REPO_URL)
     else:
         repo.remote("origin").set_url(GITHUB_REPO_URL)
 
-    repo.remote("origin").push()
+    repo.remote("origin").push(refspec="main:main")
 
 # /start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -80,6 +85,7 @@ async def add_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         device_id, username, password, expire, allowoffline = [p.strip() for p in parts]
         allowoffline = allowoffline.lower() == "true"
+
         datetime.strptime(expire, "%Y-%m-%d")
 
         users = load_users()
@@ -165,7 +171,7 @@ async def list_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("No approved IDs yet.")
 
-# Handle plain text messages
+# Text message handler
 async def handle_device_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     device_id = update.message.text.strip()
     users = load_users()
@@ -177,10 +183,9 @@ async def handle_device_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("❌ Your device ID is not approved.")
 
-# Bot entry point
+# Main bot logic
 async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add_id))
     app.add_handler(CommandHandler("remove", remove_id))
@@ -191,7 +196,10 @@ async def main():
     print("🤖 Bot is running...")
     await app.run_polling()
 
-# Dummy web server for Render
+# Dummy web server for Render to detect port
+from flask import Flask
+import threading
+
 app = Flask(__name__)
 
 @app.route('/')
