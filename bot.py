@@ -39,15 +39,22 @@ def save_users(users):
         json.dump({"users": users}, f, indent=2)
 
     repo = Repo(REPO_PATH)
-    repo.git.add("Tempkey.json")
-    repo.index.commit("Update users")
 
-    # Ensure we're on the main branch
-    if repo.head.is_detached:
-        try:
-            repo.git.checkout("main")
-        except Exception as e:
-            raise RuntimeError("❌ Failed to checkout 'main' branch. Please ensure it exists.") from e
+# ✅ 1. Ensure we're on main branch **before doing anything**
+if repo.head.is_detached:
+    try:
+        repo.git.checkout("main")
+    except Exception as e:
+        raise RuntimeError("❌ Failed to checkout 'main' branch. Please ensure it exists.") from e
+
+# ✅ 2. Now commit the file
+repo.git.add("Tempkey.json")
+repo.index.commit("Update users")
+
+# ✅ 3. Set the remote and push to GitHub
+origin = repo.remote(name="origin")
+origin.set_url(GITHUB_REPO_URL)
+origin.push("main")  # <--- THIS LINE IS MISSING IN YOUR CODE
 
     # Set or update remote
     if "origin" not in [remote.name for remote in repo.remotes]:
