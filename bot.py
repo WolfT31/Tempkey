@@ -192,7 +192,21 @@ async def main():
 
     print("🤖 Bot is running...")
     await app.run_polling()
+# Dummy web server for Render to detect port
+from flask import Flask
+import threading
 
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_web():
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+
+# Start Flask in a thread
+threading.Thread(target=run_web).start()
 # Run the bot using asyncio
 if __name__ == "__main__":
     import asyncio
