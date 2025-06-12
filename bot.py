@@ -12,6 +12,8 @@ from telegram.ext import (
 )
 from git import Repo
 from dotenv import load_dotenv
+from flask import Flask
+import threading
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,7 +25,7 @@ ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
 # Set file paths and GitHub repo URL
 REPO_PATH = os.path.abspath(os.path.dirname(__file__))
-JSON_FILE = os.path.join(REPO_PATH, "Tempkey.json")  # Renamed from users.json
+JSON_FILE = os.path.join(REPO_PATH, "Tempkey.json")
 GITHUB_REPO_URL = f"https://{GITHUB_TOKEN}@github.com/WolfT31/Tempkey.json.git"
 
 # Load user list from the Tempkey.json file
@@ -33,17 +35,22 @@ def load_users():
             return json.load(f).get("users", [])
     return []
 
-# Save updated user list and push changes to GitHub
+# ✅ Safe Git save with fallback if 'origin' is missing
 def save_users(users):
     with open(JSON_FILE, "w") as f:
         json.dump({"users": users}, f, indent=2)
 
     repo = Repo(REPO_PATH)
-    repo.git.add("Tempkey.json")  # Updated
+    repo.git.add("Tempkey.json")
     repo.index.commit("Update users")
-    origin = repo.remote(name="origin")
-    origin.set_url(GITHUB_REPO_URL)
-    origin.push()
+
+    # Check if 'origin' remote exists, if not, create it
+    if "origin" not in [remote.name for remote in repo.remotes]:
+        repo.create_remote("origin", GITHUB_REPO_URL)
+    else:
+        repo.remote("origin").set_url(GITHUB_REPO_URL)
+
+    repo.remote("origin").push()
 
 # /start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -52,7 +59,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # /add <id>,<username>,<password>,<expire>,<allowoffline>
-# Admin-only command to add new user
 async def add_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ You are not authorized to use this command.")
@@ -66,7 +72,6 @@ async def add_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # Parse input
         data = " ".join(context.args).strip()
         parts = data.split(",")
 
@@ -75,18 +80,14 @@ async def add_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         device_id, username, password, expire, allowoffline = [p.strip() for p in parts]
         allowoffline = allowoffline.lower() == "true"
-
-        # Validate expiration date format
         datetime.strptime(expire, "%Y-%m-%d")
 
         users = load_users()
 
-        # Check for duplicate ID
         if any(user["id"] == device_id for user in users):
             await update.message.reply_text("✅ This device ID already exists.")
             return
 
-        # Add new user entry
         users.append({
             "id": device_id,
             "username": username,
@@ -95,10 +96,8 @@ async def add_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "allowoffline": allowoffline
         })
 
-        # Save to file and push to GitHub
         save_users(users)
 
-        # Send success message
         await update.message.reply_text(
             f"✅ [Database Operation Success]\n"
             f"🆔 UserID: `{device_id}`\n"
@@ -113,7 +112,7 @@ async def add_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
-# /remove <id> — Admin command to remove a user by ID
+# /remove <id>
 async def remove_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ You are not authorized to use this command.")
@@ -133,7 +132,7 @@ async def remove_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_users(new_users)
         await update.message.reply_text(f"✅ Device ID `{device_id}` has been removed.")
 
-# /check <id> — Check if a device ID exists
+# /check <id>
 async def check_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("Usage: /check <device_id>")
@@ -151,7 +150,7 @@ async def check_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("❌ Device ID is NOT approved.")
 
-# /list — Admin-only list of all approved users
+# /list
 async def list_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ You are not authorized to use this command.")
@@ -166,7 +165,7 @@ async def list_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("No approved IDs yet.")
 
-# Handle plain text messages as potential device IDs
+# Handle plain text messages
 async def handle_device_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     device_id = update.message.text.strip()
     users = load_users()
@@ -178,11 +177,10 @@ async def handle_device_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("❌ Your device ID is not approved.")
 
-# Main entry point to run the bot
+# Bot entry point
 async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Register command and message handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add_id))
     app.add_handler(CommandHandler("remove", remove_id))
@@ -192,10 +190,8 @@ async def main():
 
     print("🤖 Bot is running...")
     await app.run_polling()
-# Dummy web server for Render to detect port
-from flask import Flask
-import threading
 
+# Dummy web server for Render
 app = Flask(__name__)
 
 @app.route('/')
@@ -205,9 +201,8 @@ def home():
 def run_web():
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
-# Start Flask in a thread
 threading.Thread(target=run_web).start()
-# Run the bot using asyncio
+
 if __name__ == "__main__":
     import asyncio
     try:
