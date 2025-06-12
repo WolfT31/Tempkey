@@ -23,47 +23,52 @@ ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
 # Set file paths and GitHub repo URL
 REPO_PATH = os.path.abspath(os.path.dirname(__file__))
-JSON_FILE = os.path.join(REPO_PATH, "Tempkey.json")  # Renamed from users.json
+JSON_FILE = os.path.join(REPO_PATH, "Tempkey.json")
 GITHUB_REPO_URL = f"https://{GITHUB_TOKEN}@github.com/WolfT31/Tempkey.git"
 
-# Load user list from the Tempkey.json file
+# ✅ FIXED: Load user list safely
 def load_users():
     if os.path.exists(JSON_FILE):
-        with open(JSON_FILE, "r") as f:
-            return json.load(f).get("users", [])
+        try:
+            with open(JSON_FILE, "r") as f:
+                data = f.read().strip()
+                if not data:
+                    print("⚠️ Tempkey.json is empty. Returning empty list.")
+                    return []
+                return json.loads(data).get("users", [])
+        except Exception as e:
+            print(f"❌ Error loading users: {e}")
+            return []
     return []
 
+# ✅ FIXED: Save and push to GitHub properly
 def save_users(users):
     with open(JSON_FILE, "w") as f:
         json.dump({"users": users}, f, indent=2)
 
-    print(f"✅ Wrote {len(users)} users to {JSON_FILE}")
+    print("✅ Users saved locally:", users)
 
-    try:
-        repo = Repo(REPO_PATH)
+    repo = Repo(REPO_PATH)
 
-        # Ensure we're on the main branch
-        if repo.head.is_detached:
+    # Checkout to main if detached
+    if repo.head.is_detached:
+        try:
             repo.git.checkout("main")
+        except Exception as e:
+            raise RuntimeError("❌ Failed to checkout 'main' branch.") from e
 
-        # Stage and commit the updated JSON file
-        repo.git.add(JSON_FILE)
-        repo.index.commit("Update users")
+    repo.git.add("Tempkey.json")
+    repo.index.commit("Update users")
 
-        # Set or update remote
-        if "origin" not in [remote.name for remote in repo.remotes]:
-            repo.create_remote("origin", GITHUB_REPO_URL)
-        else:
-            repo.remote("origin").set_url(GITHUB_REPO_URL)
+    if "origin" not in [r.name for r in repo.remotes]:
+        repo.create_remote("origin", GITHUB_REPO_URL)
+    else:
+        repo.remote("origin").set_url(GITHUB_REPO_URL)
 
-        # Push changes to GitHub
-        repo.remote("origin").push(refspec="main:main")
-        print("✅ Pushed to GitHub successfully")
+    repo.remote("origin").push(refspec="main:main")
+    print("✅ Changes pushed to GitHub.")
 
-    except Exception as e:
-        print(f"❌ Git operation failed: {e}")
-
-# /start command handler
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Welcome! Send your device ID or use /add /remove /check /list commands."
@@ -91,11 +96,9 @@ async def add_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         device_id, username, password, expire, allowoffline = [p.strip() for p in parts]
         allowoffline = allowoffline.lower() == "true"
-
-        datetime.strptime(expire, "%Y-%m-%d")
+        datetime.strptime(expire, "%Y-%m-%d")  # validate date
 
         users = load_users()
-
         if any(user["id"] == device_id for user in users):
             await update.message.reply_text("✅ This device ID already exists.")
             return
@@ -177,7 +180,7 @@ async def list_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("No approved IDs yet.")
 
-# Text message handler
+# Handle plain text
 async def handle_device_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     device_id = update.message.text.strip()
     users = load_users()
@@ -189,7 +192,7 @@ async def handle_device_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("❌ Your device ID is not approved.")
 
-# Main bot logic
+# Bot logic
 async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -202,7 +205,7 @@ async def main():
     print("🤖 Bot is running...")
     await app.run_polling()
 
-# Dummy web server for Render to detect port
+# Dummy web server for Render
 from flask import Flask
 import threading
 
