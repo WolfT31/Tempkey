@@ -26,56 +26,37 @@ REPO_PATH = os.path.abspath(os.path.dirname(__file__))
 JSON_FILE = os.path.join(REPO_PATH, "Tempkey.json")
 GITHUB_REPO_URL = f"https://{GITHUB_TOKEN}@github.com/WolfT31/Tempkey.git"
 
-# ✅ FIXED: Load user list safely
-import base64
-import requests
+# Load user list from the Tempkey.json file
+def load_users():
+    if os.path.exists(JSON_FILE):
+        with open(JSON_FILE, "r") as f:
+            return json.load(f).get("users", [])
+    return []
 
-# ✅ Save updated user list and push changes to GitHub via API
+# ✅ Save updated user list and push changes to GitHub
 def save_users(users):
-    json_data = json.dumps({"users": users}, indent=2)
+    with open(JSON_FILE, "w") as f:
+        json.dump({"users": users}, f, indent=2)
 
-    # GitHub Repo Info
-    owner = "WolfT31"
-    repo = "Tempkey"
-    file_path = "Tempkey.json"
-    branch = "main"
-    token = GITHUB_TOKEN
+    repo = Repo(REPO_PATH)
 
-    # GitHub API endpoint to get file SHA
-    get_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}"
+    if repo.head.is_detached:
+        try:
+            repo.git.checkout("main")
+        except Exception as e:
+            raise RuntimeError("❌ Failed to checkout 'main' branch.") from e
 
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json"
-    }
+    repo.git.add("Tempkey.json")
+    repo.index.commit("Update users")
 
-    # Get the SHA of the existing file (needed for updating)
-    response = requests.get(get_url, headers=headers)
-    if response.status_code != 200:
-        print("❌ Failed to get file SHA:", response.text)
-        return
-
-    sha = response.json().get("sha")
-    if not sha:
-        print("❌ SHA not found in response.")
-        return
-
-    # Prepare the updated content
-    data = {
-        "message": "Update Tempkey.json via Telegram bot",
-        "content": base64.b64encode(json_data.encode()).decode(),
-        "branch": branch,
-        "sha": sha
-    }
-
-    # Push the update via PUT request
-    put_response = requests.put(get_url, headers=headers, json=data)
-    if put_response.status_code == 200:
-        print("✅ Tempkey.json updated on GitHub.")
+    if "origin" not in [remote.name for remote in repo.remotes]:
+        repo.create_remote("origin", GITHUB_REPO_URL)
     else:
-        print("❌ GitHub update failed:", put_response.text)
+        repo.remote("origin").set_url(GITHUB_REPO_URL)
 
-# /start
+    repo.remote("origin").push(refspec="main:main")
+
+# /start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Welcome! Send your device ID or use /add /remove /check /list commands."
@@ -103,9 +84,11 @@ async def add_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         device_id, username, password, expire, allowoffline = [p.strip() for p in parts]
         allowoffline = allowoffline.lower() == "true"
-        datetime.strptime(expire, "%Y-%m-%d")  # validate date
+
+        datetime.strptime(expire, "%Y-%m-%d")
 
         users = load_users()
+
         if any(user["id"] == device_id for user in users):
             await update.message.reply_text("✅ This device ID already exists.")
             return
@@ -187,7 +170,7 @@ async def list_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("No approved IDs yet.")
 
-# Handle plain text
+# Text message handler
 async def handle_device_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     device_id = update.message.text.strip()
     users = load_users()
@@ -199,7 +182,7 @@ async def handle_device_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("❌ Your device ID is not approved.")
 
-# Bot logic
+# Main bot logic
 async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -212,7 +195,7 @@ async def main():
     print("🤖 Bot is running...")
     await app.run_polling()
 
-# Dummy web server for Render
+# Dummy web server for Render to detect port
 from flask import Flask
 import threading
 
