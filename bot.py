@@ -24,7 +24,7 @@ ADMIN_ID = int(os.getenv("ADMIN_ID"))
 # Set file paths and GitHub repo URL
 REPO_PATH = os.path.abspath(os.path.dirname(__file__))
 JSON_FILE = os.path.join(REPO_PATH, "Tempkey.json")  # Renamed from users.json
-GITHUB_REPO_URL = f"https://{GITHUB_TOKEN}@github.com/WolfT31/Tempkey.json.git"
+GITHUB_REPO_URL = f"https://{GITHUB_TOKEN}@github.com/WolfT31/Tempkey.git"
 
 # Load user list from the Tempkey.json file
 def load_users():
