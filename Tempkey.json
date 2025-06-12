@@ -1,0 +1,11 @@
+{
+  "users": [
+    {
+      "id": "22665533ggddhh",
+      "username": "john_doe",
+      "password": "pass123",
+      "expire": "2025-12-31",
+      "allowoffline": false
+    }
+  ]
+}
